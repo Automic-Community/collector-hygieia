@@ -38,6 +38,10 @@ import com.google.common.collect.Iterables;
  */
 @Component
 public class CdaDataCollectorTask extends CollectorTask<CdaCollector> {
+	
+	private static final String QUESTION = "?";
+	private static final String AND = "&";
+	private static final String EQUAL = "=";
 
     private final CdaCollectorRepository collectorRepository;
     private final CdaApplicationRepository applicationRepository;
@@ -53,14 +57,14 @@ public class CdaDataCollectorTask extends CollectorTask<CdaCollector> {
                                 CdaCollectorRepository collectorRepository,
                                 CdaApplicationRepository applicationRepository,
                                 EnvironmentComponentRepository envComponentRepository,
-                                CdaSettings uDeploySettings, CdaService cdaClient,
+                                CdaSettings cdaSettings, CdaService cdaClient,
                                 EnvironmentStatusRepository environmentStatusRepository,
                                 ConfigurationRepository configurationRepository,
                                 ComponentRepository dbComponentRepository) {
         super(taskScheduler, "Cda");
         this.collectorRepository = collectorRepository;
         this.applicationRepository = applicationRepository;
-        this.cdaSettings = uDeploySettings;
+        this.cdaSettings = cdaSettings;
         this.cdaClient = cdaClient;
         this.envComponentRepository = envComponentRepository;
         this.environmentStatusRepository = environmentStatusRepository;
@@ -73,10 +77,10 @@ public class CdaDataCollectorTask extends CollectorTask<CdaCollector> {
 		Configuration config = configurationRepository.findByCollectorName("Cda");
         if (config != null) {
             config.decryptOrEncrptInfo();
-            for (Map<String, String> udeployServer : config.getInfo()) {
-                cdaSettings.setUrl(udeployServer.get("url"));
-                cdaSettings.setUsername(udeployServer.get("userName"));
-                cdaSettings.setPassword(udeployServer.get("password"));
+            for (Map<String, String> cdaDeployServer : config.getInfo()) {
+                cdaSettings.setUrl(cdaDeployServer.get("url"));
+                cdaSettings.setUsername(cdaDeployServer.get("userName"));
+                cdaSettings.setPassword(cdaDeployServer.get("password"));
             }
         }
         return CdaCollector.prototype(cdaSettings.getUrl());
@@ -152,21 +156,23 @@ public class CdaDataCollectorTask extends CollectorTask<CdaCollector> {
      * For each {@link CdaApplication}, update the current
      * {@link EnvironmentComponent}s and {@link EnvironmentStatus}.
      *
-     * @param uDeployApplications list of {@link CdaApplication}s
+     * @param cdaApplication list of {@link CdaApplication}s
      */
     private void updateData(List<CdaApplication> applications) {
     	
         Map<CdaApplication, List<InstalledPackageComponent>> compListPerApp = cdaClient.getEnvironmentComponents(applications);
         for (Entry<CdaApplication, List<InstalledPackageComponent>> entry : compListPerApp.entrySet()) {
 			CdaApplication application = entry.getKey();
-			List<EnvironmentComponent> compList = entry.getValue().stream().map(i -> convertToEnvironmentComponent(i, application.getId())).collect(Collectors.toList());
+			List<InstalledPackageComponent> installations = entry.getValue().stream().filter(i -> i.getExecution() != null).collect(Collectors.toList());
+			List<EnvironmentComponent> compList = installations.stream().map(i -> convertToEnvironmentComponent(i, application.getId())).collect(Collectors.toList());
 			if (!compList.isEmpty()) {
 	            List<EnvironmentComponent> existingComponents = envComponentRepository.findByCollectorItemId(application.getId());
 	            envComponentRepository.delete(existingComponents);
 	            envComponentRepository.save(compList);
 	        }
 			
-			List<EnvironmentStatus> statusList = entry.getValue().stream().map(i -> convertToEnvironmentStatus(i, application.getId())).collect(Collectors.toList());
+			List<EnvironmentStatus> statusList = installations.stream().filter(i -> i.getExecution() != null)
+					.map(i -> convertToEnvironmentStatus(i, application.getId())).collect(Collectors.toList());
 			if (!statusList.isEmpty()) {
 	        	for (CdaApplication app : applications) {
 	        		List<EnvironmentStatus> existingStatuses = environmentStatusRepository.findByCollectorItemId(app.getId());
@@ -181,14 +187,9 @@ public class CdaDataCollectorTask extends CollectorTask<CdaCollector> {
     private EnvironmentStatus convertToEnvironmentStatus(InstalledPackageComponent i, ObjectId id) {
         EnvironmentStatus status = new EnvironmentStatus();
         status.setCollectorItemId(id);
-//        status.setComponentID(i.getComponentID());
         status.setComponentName(i.getComponent().getName());
-        status.setEnvironmentName(i.getDeploymentTarget().getName());
-        if (i.getExecution() != null) {
-        	status.setOnline(i.getExecution().getStatus().isFinished());
-        }  else {
-        	status.setOnline(false);	
-        }
+        status.setEnvironmentName(i.getExecution().getAraEnvironment().getName());
+        status.setOnline(i.getInstallationState().isSuccess());
         
         if (i.getArtifact() != null) {
         	status.setResourceName(i.getArtifact().getName());	
@@ -200,16 +201,36 @@ public class CdaDataCollectorTask extends CollectorTask<CdaCollector> {
 	private EnvironmentComponent convertToEnvironmentComponent(InstalledPackageComponent installation, ObjectId collectorId) {
     	EnvironmentComponent envComponent = new EnvironmentComponent();
     	envComponent.setCollectorItemId(collectorId);
-    	envComponent.setEnvironmentID(String.valueOf(installation.getDeploymentTarget().getId()));
-    	envComponent.setEnvironmentName(installation.getDeploymentTarget().getName());
-//    	envComponent.setComponentID(String.valueOf(installation.getComponent().getId()));
-    	envComponent.setComponentName(installation.getComponent().getName());
+    	envComponent.setEnvironmentID(String.valueOf(installation.getExecution().getAraEnvironment().getId()));
+    	envComponent.setEnvironmentName(installation.getExecution().getAraEnvironment().getName());
+    	envComponent.setComponentName(buildCompositeComponentInfo(installation.getComponent().getName(), installation.getDeploymentTarget().getName()));
     	envComponent.setComponentVersion(installation.getDeploymentPackage().getName());
         envComponent.setDeployed(installation.getInstallationState().isSuccess());
         envComponent.setAsOfDate(installation.getStartTime().getTime());
+		envComponent.setEnvironmentUrl(buildEnvironmentUrl(installation.getExecution().getInstallationUrl(),
+				installation.getApplication().getId().toString(),
+				installation.getExecution().getAraEnvironment().getId().toString()));
 		return envComponent;
 	}
     
+	private String buildCompositeComponentInfo(String componentName, String targetName) {
+		return componentName + " to " + targetName;
+	}
+	
+	private String buildEnvironmentUrl(String providedUrl, String applicationId, String environmentId) {
+		
+		String url = cdaSettings.getUiUrl();
+		try {
+			StringBuilder urlBuilder = new StringBuilder(providedUrl.split(AND)[0]);
+			urlBuilder.append(QUESTION).append("applicationFilter").append(EQUAL).append(applicationId);
+			urlBuilder.append(AND).append("environmentFilter").append(EQUAL).append(environmentId);
+			url = urlBuilder.toString();	
+		} catch (Exception ex) {
+			log("Unable to build CDA url");
+		}
+		
+		return url;
+	}
 
     private List<CdaApplication> enabledApplications(CdaCollector collector) {
         return applicationRepository.findEnabledApplications(collector.getId());

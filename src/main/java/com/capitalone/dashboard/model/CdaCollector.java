@@ -9,7 +9,7 @@ import com.capitalone.dashboard.model.CollectorType;
 import lombok.Getter;
 
 /**
- * Collector implementation for UDeploy that stores UDeploy server URLs.
+ * Collector implementation for CDA that stores CDA server URLs.
  */
 public class CdaCollector extends Collector {
 	@Getter

@@ -10,7 +10,7 @@ import com.capitalone.dashboard.model.CdaEnvironment;
 import com.capitalone.dashboard.model.EnvironmentComponent;
 
 /**
- * Client for fetching information from UDeploy.
+ * Client for fetching information from CDA.
  */
 public interface CdaService {
 

@@ -89,6 +89,10 @@ public class Execution {
     @SerializedName("install_mode")
     private String installMode;
     
+    @Getter
+    @SerializedName("installation_url")
+    private String installationUrl;
+    
     public String getActualTo() {
         if (actualTo == null) {
             return "";

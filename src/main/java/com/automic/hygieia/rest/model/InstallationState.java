@@ -33,6 +33,6 @@ public enum InstallationState {
 	}
 	
 	public boolean isSuccess() {
-		return Installed.equals(this);
+		return this == Installed;
 	}
 }

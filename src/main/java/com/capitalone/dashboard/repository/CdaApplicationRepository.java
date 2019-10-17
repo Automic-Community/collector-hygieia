@@ -14,10 +14,10 @@ import java.util.List;
 public interface CdaApplicationRepository extends BaseCollectorItemRepository<CdaApplication> {
 
     /**
-     * Find a {@link CdaApplication} by UDeploy instance URL and UDeploy application id.
+     * Find a {@link CdaApplication} by CDA instance URL and CDA application id.
      *
      * @param collectorId ID of the {@link com.capitalone.dashboard.model.CdaCollector}
-     * @param applicationId UDeploy application ID
+     * @param applicationId CDA application ID
      * @return a {@link CdaApplication} instance
      */
     @Query(value="{ 'collectorId' : ?0, options.applicationId : ?1}")
