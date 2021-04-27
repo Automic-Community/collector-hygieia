@@ -1,7 +1,6 @@
 ---
 title: CDA Collector
 sidebar: hygieia_sidebar
-permalink: 
 ---
 
 Configure the CDA Collector to display and monitor information (related to application deployments) on the Hygieia Dashboard, from CDA. Hygieia uses Spring Boot to package the collector as an executable JAR file with dependencies.
