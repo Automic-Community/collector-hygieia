@@ -1,8 +1,5 @@
 ---
 title: CDA Collector
-tags:
-keywords:
-summary:
 sidebar: hygieia_sidebar
 permalink: 
 ---
